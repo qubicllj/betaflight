@@ -387,7 +387,7 @@ const char * const lookupTableRescueAltitudeMode[] = {
 };
 #endif
 
-#if defined(USE_MAX7456) || defined(USE_FRSKYOSD)
+#if defined(USE_MAX7456) || defined(USE_FRSKYOSD) || defined(USE_MSP_DISPLAYPORT)
 static const char * const lookupTableVideoSystem[] = {
     "AUTO", "PAL", "NTSC"
 };
@@ -602,7 +602,7 @@ const lookupTableEntry_t lookupTables[] = {
     LOOKUP_TABLE_ENTRY(lookupTableGyro),
 #endif
     LOOKUP_TABLE_ENTRY(lookupTableThrottleLimitType),
-#if defined(USE_MAX7456) || defined(USE_FRSKYOSD)
+#if defined(USE_MAX7456) || defined(USE_FRSKYOSD) || defined(USE_MSP_DISPLAYPORT)
     LOOKUP_TABLE_ENTRY(lookupTableVideoSystem),
 #endif
 #if defined(USE_ITERM_RELAX)
