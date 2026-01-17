@@ -62,6 +62,7 @@
 #ifdef STM32F3
 #define MINIMAL_CLI
 #define USE_CCM_CODE
+#define USE_ADC_INTERNAL
 #define USE_TIMER_DMA
 #define USE_RPM_FILTER
 #define USE_DYN_IDLE

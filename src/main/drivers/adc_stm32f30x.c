@@ -26,40 +26,50 @@
 
 #ifdef USE_ADC
 
-#include "common/utils.h"
+#include "build/debug.h"
 
-#include "drivers/adc_impl.h"
-#include "drivers/dma.h"
 #include "drivers/dma_reqmap.h"
+
 #include "drivers/io.h"
-#include "drivers/rcc.h"
+#include "io_impl.h"
+#include "rcc.h"
+#include "dma.h"
+
 #include "drivers/sensor.h"
-#include "drivers/time.h"
+
+#include "adc.h"
+#include "adc_impl.h"
 
 #include "pg/adc.h"
 
-#include "adc.h"
-
 const adcDevice_t adcHardware[] = {
-    { .ADCx = ADC1, .rccADC = RCC_AHB(ADC12),
+    {
+        .ADCx = ADC1,
+        .rccADC = RCC_AHB(ADC12),
 #if !defined(USE_DMA_SPEC)
         .dmaResource = (dmaResource_t *)DMA1_Channel1,
 #endif
     },
 #ifdef ADC24_DMA_REMAP
-    { .ADCx = ADC2, .rccADC = RCC_AHB(ADC12),
+    {
+        .ADCx = ADC2,
+        .rccADC = RCC_AHB(ADC12),
 #if !defined(USE_DMA_SPEC)
         .dmaResource = (dmaResource_t *)DMA2_Channel3,
 #endif
     },
 #else
-    { .ADCx = ADC2, .rccADC = RCC_AHB(ADC12),
+    {
+        .ADCx = ADC2,
+        .rccADC = RCC_AHB(ADC12),
 #if !defined(USE_DMA_SPEC)
         .dmaResource = (dmaResource_t *)DMA2_Channel1,
 #endif
     },
 #endif
-    { .ADCx = ADC3, .rccADC = RCC_AHB(ADC34),
+    {
+        .ADCx = ADC3,
+        .rccADC = RCC_AHB(ADC34),
 #if !defined(USE_DMA_SPEC)
         .dmaResource = (dmaResource_t *)DMA2_Channel5,
 #endif
@@ -108,12 +118,91 @@ const adcTagMap_t adcTagMap[] = {
     { DEFIO_TAG_E__PF4,  ADC_DEVICES_1,  ADC_Channel_5  }, // ADC1
 };
 
-void adcInit(const adcConfig_t *config)
+#define VREFINT_CAL_ADDR  0x1FFFF7BA
+#define TS_CAL1_ADDR      0x1FFFF7B8
+#define TS_CAL2_ADDR      0x1FFFF7C2
+
+void adcInitDevice(ADC_TypeDef *adcdev, int channelCount)
 {
     ADC_InitTypeDef ADC_InitStructure;
-    DMA_InitTypeDef DMA_InitStructure;
 
-    uint8_t adcChannelCount = 0;
+    ADC_StructInit(&ADC_InitStructure);
+
+    ADC_InitStructure.ADC_ContinuousConvMode    = ADC_ContinuousConvMode_Enable;
+    ADC_InitStructure.ADC_Resolution            = ADC_Resolution_12b;
+    ADC_InitStructure.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_0;
+    ADC_InitStructure.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_None;
+    ADC_InitStructure.ADC_DataAlign             = ADC_DataAlign_Right;
+    ADC_InitStructure.ADC_OverrunMode           = ADC_OverrunMode_Disable;
+    ADC_InitStructure.ADC_AutoInjMode           = ADC_AutoInjec_Disable;
+    ADC_InitStructure.ADC_NbrOfRegChannel       = channelCount;
+
+    ADC_Init(adcdev, &ADC_InitStructure);
+}
+
+#ifdef USE_ADC_INTERNAL
+void adcInitInternalInjected(const adcConfig_t *config)
+{
+    ADC_VrefintCmd(ADC1, ENABLE);
+    ADC_TempSensorCmd(ADC1, ENABLE);
+    ADC_InjectedInitTypeDef ADC_IS;
+    // Properly initialize the structure to zero
+    ADC_InjectedStructInit(&ADC_IS);
+    // 1. Define the sequence configuration
+    ADC_IS.ADC_ExternalTrigInjecConvEvent = ADC_ExternalTrigInjecConvEvent_0; // Software start
+    ADC_IS.ADC_ExternalTrigInjecEventEdge = ADC_ExternalTrigInjecEventEdge_None;
+    ADC_IS.ADC_NbrOfInjecChannel = 2;
+    ADC_IS.ADC_InjecSequence1 = ADC_Channel_Vrefint; // Vrefint
+    ADC_IS.ADC_InjecSequence2 = ADC_Channel_TempSensor; // Temperature Sensor
+    // 2. Apply the configuration to ADC1
+    ADC_InjectedInit(ADC1, &ADC_IS);
+    // 3. Set the sampling time for each channel
+    ADC_InjectedChannelSampleTimeConfig(ADC1, ADC_Channel_Vrefint, ADC_SampleTime_601Cycles5);
+    ADC_InjectedChannelSampleTimeConfig(ADC1, ADC_Channel_TempSensor, ADC_SampleTime_601Cycles5);
+
+    adcVREFINTCAL = config->vrefIntCalibration ? config->vrefIntCalibration : *(uint16_t *)VREFINT_CAL_ADDR;
+    adcTSCAL1 = config->tempSensorCalibration1 ? config->tempSensorCalibration1 : *(uint16_t *)TS_CAL1_ADDR;
+    adcTSCAL2 = config->tempSensorCalibration2 ? config->tempSensorCalibration2 : *(uint16_t *)TS_CAL2_ADDR;
+
+    adcTSSlopeK = (110 - 30) * 1000 / (adcTSCAL2 - adcTSCAL1);
+}
+
+static bool adcInternalConversionInProgress = false;
+
+bool adcInternalIsBusy(void)
+{
+    if (adcInternalConversionInProgress) {
+        if (ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC) != RESET) {
+            adcInternalConversionInProgress = false;
+        }
+    }
+
+    return adcInternalConversionInProgress;
+}
+
+void adcInternalStartConversion(void)
+{
+    ADC_ClearFlag(ADC1, ADC_FLAG_JEOC);
+    ADC_StartInjectedConversion(ADC1);
+
+    adcInternalConversionInProgress = true;
+}
+
+uint16_t adcInternalReadVrefint(void)
+{
+    return ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
+}
+
+uint16_t adcInternalReadTempsensor(void)
+{
+    return ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_2);
+}
+#endif
+
+void adcInit(const adcConfig_t *config)
+{
+    uint8_t i;
+    uint8_t configuredAdcChannels = 0;
 
     memset(&adcOperatingConfig, 0, sizeof(adcOperatingConfig));
 
@@ -154,14 +243,16 @@ void adcInit(const adcConfig_t *config)
         IOInit(IOGetByTag(adcOperatingConfig[i].tag), OWNER_ADC_BATT + i, 0);
         IOConfigGPIO(IOGetByTag(adcOperatingConfig[i].tag), IO_CONFIG(GPIO_Mode_AN, 0, GPIO_OType_OD, GPIO_PuPd_NOPULL));
         adcOperatingConfig[i].adcChannel = adcChannelByTag(adcOperatingConfig[i].tag);
-        adcOperatingConfig[i].dmaIndex = adcChannelCount++;
+        adcOperatingConfig[i].dmaIndex = configuredAdcChannels++;
         adcOperatingConfig[i].sampleTime = ADC_SampleTime_601Cycles5;
         adcOperatingConfig[i].enabled = true;
     }
 
+#ifndef USE_ADC_INTERNAL
     if (!adcActive) {
         return;
     }
+#endif
 
     if ((device == ADCDEV_1) || (device == ADCDEV_2)) {
         // enable clock for ADC1+2
@@ -172,47 +263,6 @@ void adcInit(const adcConfig_t *config)
     }
 
     RCC_ClockCmd(adc.rccADC, ENABLE);
-
-#if defined(USE_DMA_SPEC)
-    const dmaChannelSpec_t *dmaSpec = dmaGetChannelSpecByPeripheral(DMA_PERIPH_ADC, device, config->dmaopt[device]);
-
-    if (!dmaSpec || !dmaAllocate(dmaGetIdentifier(dmaSpec->ref), OWNER_ADC, RESOURCE_INDEX(device))) {
-        return;
-    }
-
-    dmaEnable(dmaGetIdentifier(dmaSpec->ref));
-
-    DMA_DeInit((DMA_ARCH_TYPE *)dmaSpec->ref);
-#else
-    if (!dmaAllocate(dmaGetIdentifier(adc.dmaResource), OWNER_ADC, 0)) {
-        return;
-    }
-
-    dmaEnable(dmaGetIdentifier(adc.dmaResource));
-
-    xDMA_DeInit(adc.dmaResource);
-#endif
-
-    DMA_StructInit(&DMA_InitStructure);
-    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&adc.ADCx->DR;
-    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)adcValues;
-    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
-    DMA_InitStructure.DMA_BufferSize = adcChannelCount;
-    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
-    DMA_InitStructure.DMA_MemoryInc = adcChannelCount > 1 ? DMA_MemoryInc_Enable : DMA_MemoryInc_Disable;
-    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
-    DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
-    DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
-    DMA_InitStructure.DMA_Priority = DMA_Priority_High;
-    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
-
-#if defined(USE_DMA_SPEC)
-    xDMA_Init(dmaSpec->ref, &DMA_InitStructure);
-    xDMA_Cmd(dmaSpec->ref, ENABLE);
-#else
-    xDMA_Init(adc.dmaResource, &DMA_InitStructure);
-    xDMA_Cmd(adc.dmaResource, ENABLE);
-#endif
 
     // calibrate
 
@@ -233,34 +283,78 @@ void adcInit(const adcConfig_t *config)
     ADC_CommonInitStructure.ADC_TwoSamplingDelay = 0;
     ADC_CommonInit(adc.ADCx, &ADC_CommonInitStructure);
 
-    ADC_StructInit(&ADC_InitStructure);
+#ifdef USE_ADC_INTERNAL
+    // If device is not ADC1 or there's no active channel, then initialize ADC1 separately
+    if (device != ADCDEV_1 || !adcActive) {
+        RCC_ClockCmd(adcHardware[ADCDEV_1].rccADC, ENABLE);
+        adcInitDevice(ADC1, 2);
+        ADC_Cmd(ADC1, ENABLE);
+    }
 
-    ADC_InitStructure.ADC_ContinuousConvMode    = ADC_ContinuousConvMode_Enable;
-    ADC_InitStructure.ADC_Resolution            = ADC_Resolution_12b;
-    ADC_InitStructure.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_0;
-    ADC_InitStructure.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_None;
-    ADC_InitStructure.ADC_DataAlign             = ADC_DataAlign_Right;
-    ADC_InitStructure.ADC_OverrunMode           = ADC_OverrunMode_Disable;
-    ADC_InitStructure.ADC_AutoInjMode           = ADC_AutoInjec_Disable;
-    ADC_InitStructure.ADC_NbrOfRegChannel       = adcChannelCount;
+    // Initialize for injected conversion
+    adcInitInternalInjected(config);
 
-    ADC_Init(adc.ADCx, &ADC_InitStructure);
+    if (!adcActive) {
+        return;
+    }
+#endif
+
+    adcInitDevice(adc.ADCx, configuredAdcChannels);
 
     uint8_t rank = 1;
-    for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
+    for (i = 0; i < ADC_CHANNEL_COUNT; i++) {
         if (!adcOperatingConfig[i].enabled) {
             continue;
         }
         ADC_RegularChannelConfig(adc.ADCx, adcOperatingConfig[i].adcChannel, rank++, adcOperatingConfig[i].sampleTime);
     }
-
-    ADC_Cmd(adc.ADCx, ENABLE);
-
-    while (!ADC_GetFlagStatus(adc.ADCx, ADC_FLAG_RDY));
-
     ADC_DMAConfig(adc.ADCx, ADC_DMAMode_Circular);
 
     ADC_DMACmd(adc.ADCx, ENABLE);
+    ADC_Cmd(adc.ADCx, ENABLE);
+
+#ifdef USE_DMA_SPEC
+    const dmaChannelSpec_t *dmaSpec = dmaGetChannelSpecByPeripheral(DMA_PERIPH_ADC, device, config->dmaopt[device]);
+
+    if (!dmaSpec || !dmaAllocate(dmaGetIdentifier(dmaSpec->ref), OWNER_ADC, RESOURCE_INDEX(device))) {
+        return;
+    }
+
+    dmaEnable(dmaGetIdentifier(dmaSpec->ref));
+
+    DMA_DeInit((DMA_ARCH_TYPE *)dmaSpec->ref);
+#else
+    if (!dmaAllocate(dmaGetIdentifier(adc.dmaResource), OWNER_ADC, 0)) {
+        return;
+    }
+
+    dmaEnable(dmaGetIdentifier(adc.dmaResource));
+
+    xDMA_DeInit(adc.dmaResource);
+#endif
+
+    DMA_InitTypeDef DMA_InitStructure;
+
+    DMA_StructInit(&DMA_InitStructure);
+    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&adc.ADCx->DR;
+    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)adcValues;
+    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
+    DMA_InitStructure.DMA_BufferSize = configuredAdcChannels;
+    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+    DMA_InitStructure.DMA_MemoryInc = configuredAdcChannels > 1 ? DMA_MemoryInc_Enable : DMA_MemoryInc_Disable;
+    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
+    DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
+    DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
+    DMA_InitStructure.DMA_Priority = DMA_Priority_High;
+    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+
+#ifdef USE_DMA_SPEC
+    xDMA_Init(dmaSpec->ref, &DMA_InitStructure);
+    xDMA_Cmd(dmaSpec->ref, ENABLE);
+#else
+    xDMA_Init(adc.dmaResource, &DMA_InitStructure);
+    xDMA_Cmd(adc.dmaResource, ENABLE);
+#endif
 
     ADC_StartConversion(adc.ADCx);
 }
