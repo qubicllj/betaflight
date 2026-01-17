@@ -143,3 +143,10 @@ void adcGetChannelValues(void);
 #define TEMPSENSOR_CAL1_TEMP               ((int32_t)  30)
 #define TEMPSENSOR_CAL2_TEMP               ((int32_t) 110)
 #endif
+
+#ifdef STM32F3
+#define VREFINT_CAL_VREF                   (3300U)
+#define TEMPSENSOR_CAL_VREFANALOG          (3300U)
+#define TEMPSENSOR_CAL1_TEMP               ((int32_t)  30)
+#define TEMPSENSOR_CAL2_TEMP               ((int32_t) 110)
+#endif
