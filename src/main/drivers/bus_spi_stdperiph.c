@@ -99,6 +99,12 @@ void spiInitDevice(SPIDevice device)
 
     SPI_I2S_DMACmd(spi->dev, SPI_I2S_DMAReq_Tx | SPI_I2S_DMAReq_Rx, DISABLE);
     SPI_Init(spi->dev, &defaultInit);
+
+    #if defined(STM32F3)
+        // Critical for F3: Configure RX FIFO threshold to 1/4 (8-bit)
+        SPI_RxFIFOThresholdConfig(spi->dev, SPI_RxFIFOThreshold_QF);
+    #endif
+
     SPI_Cmd(spi->dev, ENABLE);
 }
 
@@ -107,8 +113,13 @@ void spiInternalResetDescriptors(busDevice_t *bus)
     DMA_InitTypeDef *initTx = bus->initTx;
 
     DMA_StructInit(initTx);
+#if defined(STM32F3)
+    initTx->DMA_M2M = DMA_M2M_Disable;
+    initTx->DMA_DIR = DMA_DIR_PeripheralDST;
+#else
     initTx->DMA_Channel = bus->dmaTx->channel;
     initTx->DMA_DIR = DMA_DIR_MemoryToPeripheral;
+#endif
     initTx->DMA_Mode = DMA_Mode_Normal;
     initTx->DMA_PeripheralBaseAddr = (uint32_t)&bus->busType_u.spi.instance->DR;
     initTx->DMA_Priority = DMA_Priority_Low;
@@ -120,8 +131,13 @@ void spiInternalResetDescriptors(busDevice_t *bus)
         DMA_InitTypeDef *initRx = bus->initRx;
 
         DMA_StructInit(initRx);
+#if defined(STM32F3)
+        initRx->DMA_M2M = DMA_M2M_Disable;
+        initRx->DMA_DIR = DMA_DIR_PeripheralSRC;
+#else
         initRx->DMA_Channel = bus->dmaRx->channel;
         initRx->DMA_DIR = DMA_DIR_PeripheralToMemory;
+#endif
         initRx->DMA_Mode = DMA_Mode_Normal;
         initRx->DMA_PeripheralBaseAddr = (uint32_t)&bus->busType_u.spi.instance->DR;
         initRx->DMA_Priority = DMA_Priority_Low;
@@ -132,11 +148,18 @@ void spiInternalResetDescriptors(busDevice_t *bus)
 
 void spiInternalResetStream(dmaChannelDescriptor_t *descriptor)
 {
+#if defined(STM32F3)
+    // F3 uses Channel instead of Stream
+    DMA_Channel_TypeDef *channelRegs = (DMA_Channel_TypeDef *)descriptor->ref;
+
+    // Disable the channel (CCR is the equivalent of CR on F4)
+    channelRegs->CCR &= (uint16_t)(~DMA_CCR_EN);
+#else
     DMA_Stream_TypeDef *streamRegs = (DMA_Stream_TypeDef *)descriptor->ref;
 
     // Disable the stream
     streamRegs->CR = 0U;
-
+#endif
     // Clear any pending interrupt flags
     DMA_CLEAR_FLAG(descriptor, DMA_IT_HTIF | DMA_IT_TEIF | DMA_IT_TCIF);
 }
@@ -147,11 +170,23 @@ static bool spiInternalReadWriteBufPolled(SPI_TypeDef *instance, const uint8_t *
 
     while (len--) {
         b = txData ? *(txData++) : 0xFF;
+#if defined(STM32F3)
+        // STM32F3 has a FIFO and requires 8-bit access to the DR register
+        // to avoid sending 16-bit frames.
+        while (SPI_I2S_GetFlagStatus(instance, SPI_I2S_FLAG_TXE) == RESET);
+        // Use the 8-bit send function for F3
+        SPI_SendData8(instance, b);
+        
+        while (SPI_I2S_GetFlagStatus(instance, SPI_I2S_FLAG_RXNE) == RESET);
+        // Use the 8-bit receive function for F3
+        b = SPI_ReceiveData8(instance);
+#else
         while (SPI_I2S_GetFlagStatus(instance, SPI_I2S_FLAG_TXE) == RESET);
         SPI_I2S_SendData(instance, b);
 
         while (SPI_I2S_GetFlagStatus(instance, SPI_I2S_FLAG_RXNE) == RESET);
         b = SPI_I2S_ReceiveData(instance);
+#endif
         if (rxData) {
             *(rxData++) = b;
         }
@@ -183,11 +218,19 @@ void spiInternalInitStream(const extDevice_t *dev, bool preInit)
     DMA_InitTypeDef *initTx = bus->initTx;
 
     if (txData) {
+#if defined(STM32F3)
+        initTx->DMA_MemoryBaseAddr = (uint32_t)txData;
+#else
         initTx->DMA_Memory0BaseAddr = (uint32_t)txData;
+#endif
         initTx->DMA_MemoryInc = DMA_MemoryInc_Enable;
     } else {
         dummyTxByte = 0xff;
+#if defined(STM32F3)
+        initTx->DMA_MemoryBaseAddr = (uint32_t)&dummyTxByte;
+#else
         initTx->DMA_Memory0BaseAddr = (uint32_t)&dummyTxByte;
+#endif
         initTx->DMA_MemoryInc = DMA_MemoryInc_Disable;
     }
     initTx->DMA_BufferSize = len;
@@ -197,14 +240,26 @@ void spiInternalInitStream(const extDevice_t *dev, bool preInit)
         DMA_InitTypeDef *initRx = bus->initRx;
 
         if (rxData) {
+#if defined(STM32F3)
+            initRx->DMA_MemoryBaseAddr = (uint32_t)rxData;
+#else
             initRx->DMA_Memory0BaseAddr = (uint32_t)rxData;
+#endif
             initRx->DMA_MemoryInc = DMA_MemoryInc_Enable;
         } else {
+#if defined(STM32F3)
+            initRx->DMA_MemoryBaseAddr = (uint32_t)&dummyRxByte;
+#else
             initRx->DMA_Memory0BaseAddr = (uint32_t)&dummyRxByte;
+#endif
             initRx->DMA_MemoryInc = DMA_MemoryInc_Disable;
         }
+#if defined(STM32F3)
+        if ((initRx->DMA_MemoryBaseAddr & 0x1) || (len & 0x1)) {
+#else
         // If possible use 16 bit memory writes to prevent atomic access issues on gyro data
         if ((initRx->DMA_Memory0BaseAddr & 0x1) || (len & 0x1)) {
+#endif
             initRx->DMA_MemoryDataSize = DMA_MemoryDataSize_Byte;
         } else {
             initRx->DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
@@ -217,9 +272,17 @@ void spiInternalStartDMA(const extDevice_t *dev)
 {
     dmaChannelDescriptor_t *dmaTx = dev->bus->dmaTx;
     dmaChannelDescriptor_t *dmaRx = dev->bus->dmaRx;
+#if defined(STM32F3)
+    DMA_Channel_TypeDef *channelRegsTx = (DMA_Channel_TypeDef *)dmaTx->ref;
+#else
     DMA_Stream_TypeDef *streamRegsTx = (DMA_Stream_TypeDef *)dmaTx->ref;
+#endif
     if (dmaRx) {
+#if defined(STM32F3)
+        DMA_Channel_TypeDef *channelRegsRx = (DMA_Channel_TypeDef *)dmaRx->ref;
+#else
         DMA_Stream_TypeDef *streamRegsRx = (DMA_Stream_TypeDef *)dmaRx->ref;
+#endif
 
         // Use the correct callback argument
         dmaRx->userParam = (uint32_t)dev;
@@ -228,18 +291,32 @@ void spiInternalStartDMA(const extDevice_t *dev)
         DMA_CLEAR_FLAG(dmaTx, DMA_IT_HTIF | DMA_IT_TEIF | DMA_IT_TCIF);
         DMA_CLEAR_FLAG(dmaRx, DMA_IT_HTIF | DMA_IT_TEIF | DMA_IT_TCIF);
 
+#if defined(STM32F3)
+        channelRegsTx->CCR &= (uint16_t)(~DMA_CCR_EN);
+        channelRegsRx->CCR &= (uint16_t)(~DMA_CCR_EN);
+#else
         // Disable streams to enable update
         streamRegsTx->CR = 0U;
         streamRegsRx->CR = 0U;
+#endif
 
+#if defined(STM32F3)
+        DMA_ITConfig(channelRegsRx, DMA_IT_TC, ENABLE);
+#else
         /* Use the Rx interrupt as this occurs once the SPI operation is complete whereas the Tx interrupt
          * occurs earlier when the Tx FIFO is empty, but the SPI operation is still in progress
          */
         DMA_ITConfig(streamRegsRx, DMA_IT_TC, ENABLE);
+#endif
 
+#if defined(STM32F3)
+        DMA_Init(channelRegsTx, dev->bus->initTx);
+        DMA_Init(channelRegsRx, dev->bus->initRx);
+#else
         // Update streams
         DMA_Init(streamRegsTx, dev->bus->initTx);
         DMA_Init(streamRegsRx, dev->bus->initRx);
+#endif
 
         /* Note from AN4031
          *
@@ -248,9 +325,14 @@ void spiInternalStartDMA(const extDevice_t *dev)
          * the first required data to the peripheral (in case of memory-to-peripheral transfer).
          */
 
+#if defined(STM32F3)
+        DMA_Cmd(channelRegsTx, ENABLE);
+        DMA_Cmd(channelRegsRx, ENABLE);
+#else
         // Enable streams
         DMA_Cmd(streamRegsTx, ENABLE);
         DMA_Cmd(streamRegsRx, ENABLE);
+#endif
 
         /* Enable the SPI DMA Tx & Rx requests */
         SPI_I2S_DMACmd(dev->bus->busType_u.spi.instance, SPI_I2S_DMAReq_Tx | SPI_I2S_DMAReq_Rx, ENABLE);
@@ -261,6 +343,13 @@ void spiInternalStartDMA(const extDevice_t *dev)
         // Clear transfer flags
         DMA_CLEAR_FLAG(dmaTx, DMA_IT_HTIF | DMA_IT_TEIF | DMA_IT_TCIF);
 
+#if defined(STM32F3)
+        channelRegsTx->CCR &= (uint16_t)(~DMA_CCR_EN);
+
+        DMA_ITConfig(channelRegsTx, DMA_IT_TC, ENABLE);
+
+        DMA_Init(channelRegsTx, dev->bus->initTx);
+#else
         // Disable stream to enable update
         streamRegsTx->CR = 0U;
 
@@ -268,6 +357,7 @@ void spiInternalStartDMA(const extDevice_t *dev)
 
         // Update stream
         DMA_Init(streamRegsTx, dev->bus->initTx);
+#endif
 
         /* Note from AN4031
          *
@@ -276,8 +366,12 @@ void spiInternalStartDMA(const extDevice_t *dev)
          * the first required data to the peripheral (in case of memory-to-peripheral transfer).
          */
 
+#if defined(STM32F3)
+        DMA_Cmd(channelRegsTx, ENABLE);
+#else
         // Enable stream
         DMA_Cmd(streamRegsTx, ENABLE);
+#endif
 
         /* Enable the SPI DMA Tx request */
         SPI_I2S_DMACmd(dev->bus->busType_u.spi.instance, SPI_I2S_DMAReq_Tx, ENABLE);
@@ -290,14 +384,26 @@ void spiInternalStopDMA (const extDevice_t *dev)
     dmaChannelDescriptor_t *dmaTx = dev->bus->dmaTx;
     dmaChannelDescriptor_t *dmaRx = dev->bus->dmaRx;
     SPI_TypeDef *instance = dev->bus->busType_u.spi.instance;
+#if defined(STM32F3)
+    DMA_Channel_TypeDef *channelRegsTx = (DMA_Channel_TypeDef *)dmaTx->ref;
+#else
     DMA_Stream_TypeDef *streamRegsTx = (DMA_Stream_TypeDef *)dmaTx->ref;
+#endif
 
     if (dmaRx) {
+#if defined(STM32F3)
+        DMA_Channel_TypeDef *channelRegsRx = (DMA_Channel_TypeDef *)dmaRx->ref;
+
+        channelRegsTx->CCR &= (uint16_t)(~DMA_CCR_EN);
+        channelRegsRx->CCR &= (uint16_t)(~DMA_CCR_EN);
+#else
+        DMA_Stream_TypeDef *streamRegsTx = (DMA_Stream_TypeDef *)dmaTx->ref;
         DMA_Stream_TypeDef *streamRegsRx = (DMA_Stream_TypeDef *)dmaRx->ref;
 
         // Disable streams
         streamRegsTx->CR = 0U;
         streamRegsRx->CR = 0U;
+#endif
 
         SPI_I2S_DMACmd(instance, SPI_I2S_DMAReq_Tx | SPI_I2S_DMAReq_Rx, DISABLE);
     } else {
@@ -309,8 +415,12 @@ void spiInternalStopDMA (const extDevice_t *dev)
             instance->DR;
         }
 
+#if defined(STM32F3)
+        channelRegsTx->CCR &= (uint16_t)(~DMA_CCR_EN);
+#else
         // Disable stream
         streamRegsTx->CR = 0U;
+#endif
 
         SPI_I2S_DMACmd(instance, SPI_I2S_DMAReq_Tx, DISABLE);
     }
