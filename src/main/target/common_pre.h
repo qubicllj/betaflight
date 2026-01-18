@@ -64,6 +64,7 @@
 #define USE_CCM_CODE
 #define USE_ADC_INTERNAL
 #define USE_TIMER_DMA
+#define USE_OVERCLOCK
 #define USE_RPM_FILTER
 #define USE_DYN_IDLE
 #define USE_DYN_NOTCH_FILTER

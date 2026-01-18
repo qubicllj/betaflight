@@ -1112,7 +1112,7 @@ extern "C" {
     bool imuQuaternionHeadfreeOffsetSet(void) { return true; }
     void rescheduleTask(taskId_e, timeDelta_t) {}
     bool usbCableIsInserted(void) { return false; }
-    bool usbVcpIsConnected(void) { return false; }
+    uint8_t usbVcpIsConnected(void) { return 0; }
     void pidSetAntiGravityState(bool) {}
     void osdSuppressStats(bool) {}
     float scaleRangef(float, float, float, float, float) { return 0.0f; }
