@@ -29,10 +29,6 @@
 #warning STM32F1 based targets are unsupported as of Betaflight 3.3.
 #endif
 
-#ifdef STM32F3
-#warning STM32F3 based targets are unsupported as of Betaflight 4.1.
-#endif
-
 #ifdef USE_CLI_DEBUG_PRINT
 #warning Do not use USE_CLI_DEBUG_PRINT for production builds.
 #endif
