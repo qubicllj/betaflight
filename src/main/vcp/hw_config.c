@@ -86,7 +86,7 @@ void Set_System(void)
      To reconfigure the default setting of SystemInit() function, refer to
      system_stm32f10x.c file
      */
-#if defined(STM32L1XX_MD) || defined(STM32L1XX_HD)|| defined(STM32L1XX_MD_PLUS) || defined(STM32F37X) || defined(STM32F303xC)
+#if defined(STM32F37X) || defined(STM32F303xC)
     /* Enable the SYSCFG module clock */
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
 #endif /* STM32L1XX_XD */

@@ -162,7 +162,7 @@ MCU_COMMON_SRC = \
             startup/system_stm32f4xx.c \
             drivers/accgyro/accgyro_mpu.c \
             drivers/adc_stm32f4xx.c \
-            drivers/bus_i2c_stm32f4xx.c \
+            drivers/bus_i2c_stm32f40x.c \
             drivers/bus_spi_stdperiph.c \
             drivers/dma_stm32f4xx.c \
             drivers/dshot_bitbang.c \

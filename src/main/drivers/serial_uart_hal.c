@@ -119,7 +119,7 @@ void uartReconfigure(uartPort_t *uartPort)
 
 
     usartConfigurePinInversion(uartPort);
-#if !(defined(STM32F1) || defined(STM32F4))
+#if !(defined(STM32F4))
     uartConfigurePinSwap(uartPort);
 #endif
 

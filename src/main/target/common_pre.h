@@ -59,6 +59,13 @@
 #define USE_DSHOT_TELEMETRY_STATS
 #endif
 
+#ifdef STM32F3
+#define MINIMAL_CLI
+#define USE_DSHOT
+#define USE_DYN_NOTCH_FILTER
+#define USE_CCM_CODE
+#endif
+
 #ifdef STM32F4
 #if defined(STM32F40_41xxx)
 #define USE_FAST_DATA

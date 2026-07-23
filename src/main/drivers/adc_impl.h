@@ -39,6 +39,8 @@
 #else
 #define ADC_TAG_MAP_COUNT 47
 #endif
+#elif defined(STM32F3)
+#define ADC_TAG_MAP_COUNT 39
 #else
 #define ADC_TAG_MAP_COUNT 10
 #endif

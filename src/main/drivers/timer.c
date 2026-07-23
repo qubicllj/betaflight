@@ -356,6 +356,11 @@ void timerConfigure(const timerHardware_t *timerHardwarePtr, uint16_t period, ui
         timerNVICConfigure(TIM8_UP_TIM13_IRQn);
         break;
 #endif
+#ifdef STM32F303xC
+    case TIM1_CC_IRQn:
+        timerNVICConfigure(TIM1_UP_TIM16_IRQn);
+        break;
+#endif
     }
 }
 
@@ -765,6 +770,13 @@ _TIM_IRQ_HANDLER2(TIM1_UP_TIM10_IRQHandler, 1, 10);  // both timers are in use
 _TIM_IRQ_HANDLER(TIM1_UP_TIM10_IRQHandler, 1);     // timer10 is not used
 #  endif
 # endif
+# ifdef STM32F303xC
+#  if USED_TIMERS & TIM_N(16)
+_TIM_IRQ_HANDLER2(TIM1_UP_TIM16_IRQHandler, 1, 16);  // both timers are in use
+#  else
+_TIM_IRQ_HANDLER(TIM1_UP_TIM16_IRQHandler, 1);       // timer16 is not used
+#  endif
+# endif
 #endif
 #if USED_TIMERS & TIM_N(2)
 _TIM_IRQ_HANDLER(TIM2_IRQHandler, 2);
@@ -822,6 +834,9 @@ _TIM_IRQ_HANDLER(TIM8_TRG_COM_TIM14_IRQHandler, 14);
 #endif
 #if USED_TIMERS & TIM_N(15)
 _TIM_IRQ_HANDLER(TIM1_BRK_TIM15_IRQHandler, 15);
+#endif
+#if defined(STM32F303xC) && ((USED_TIMERS & (TIM_N(1)|TIM_N(16))) == (TIM_N(16)))
+_TIM_IRQ_HANDLER(TIM1_UP_TIM16_IRQHandler, 16);    // only timer16 is used, not timer1
 #endif
 #if USED_TIMERS & TIM_N(17)
 _TIM_IRQ_HANDLER(TIM1_TRG_COM_TIM17_IRQHandler, 17);

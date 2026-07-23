@@ -169,7 +169,16 @@ typedef enum {
     DMA1_CH5_HANDLER,
     DMA1_CH6_HANDLER,
     DMA1_CH7_HANDLER,
+#if defined(STM32F3)
+    DMA2_CH1_HANDLER,
+    DMA2_CH2_HANDLER,
+    DMA2_CH3_HANDLER,
+    DMA2_CH4_HANDLER,
+    DMA2_CH5_HANDLER,
+    DMA_LAST_HANDLER = DMA2_CH5_HANDLER
+#else
     DMA_LAST_HANDLER = DMA1_CH7_HANDLER
+#endif
 } dmaIdentifier_e;
 
 #define DMA_DEVICE_NO(x)    ((((x)-1) / 7) + 1)
@@ -192,7 +201,11 @@ typedef enum {
     .owner.resourceIndex = 0 \
     }
 
+#if defined(USE_CCM_CODE) && defined(STM32F3)
+#define DMA_HANDLER_CODE CCM_CODE
+#else
 #define DMA_HANDLER_CODE
+#endif
 
 #define DEFINE_DMA_IRQ_HANDLER(d, c, i) DMA_HANDLER_CODE void DMA ## d ## _Channel ## c ## _IRQHandler(void) {\
                                                                         const uint8_t index = DMA_IDENTIFIER_TO_INDEX(i); \
