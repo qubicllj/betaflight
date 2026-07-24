@@ -61,9 +61,13 @@
 
 #ifdef STM32F3
 #define MINIMAL_CLI
-#define USE_DSHOT
-#define USE_DYN_NOTCH_FILTER
 #define USE_CCM_CODE
+#define USE_TIMER_DMA
+#define USE_RPM_FILTER
+#define USE_DYN_IDLE
+#define USE_DYN_NOTCH_FILTER
+
+#undef USE_DSHOT_BITBANG
 #endif
 
 #ifdef STM32F4
