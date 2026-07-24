@@ -31,37 +31,7 @@
 #define USBD_PRODUCT_STRING     "CrazyBee F3 FR"
 #endif
 
-#undef USE_SERIALRX_CRSF
-#undef USE_SERIALRX_GHST
-#undef USE_SERIALRX_SUMD
-#undef USE_SERIALRX_SUMH
-#undef USE_SERIALRX_XBUS
-#undef USE_TELEMETRY_CRSF
-#undef USE_TELEMETRY_GHST
-#undef USE_TELEMETRY_MAVLINK
-#undef USE_PWM
-
-
-#if defined(CRAZYBEEF3FS)
-#undef USE_SERIALRX_SBUS
-#undef USE_SERIALRX_FPORT
-#undef USE_SERIALRX_SPEKTRUM
-#undef USE_TELEMETRY_FRSKY_HUB
-#undef USE_TELEMETRY_SMARTPORT
-#undef USE_TELEMETRY_SRXL
-#elif defined(CRAZYBEEF3DX)
-#undef USE_SERIALRX_SBUS
-#undef USE_SERIALRX_FPORT
-#undef USE_SERIALRX_IBUS
-#undef USE_TELEMETRY_FRSKY_HUB
-#undef USE_TELEMETRY_SMARTPORT
-#else
-#undef USE_SERIALRX_SPEKTRUM
-#undef USE_SERIALRX_IBUS
-#undef USE_TELEMETRY_SRXL
-#endif
-
-#define ENABLE_DSHOT_DMAR       DSHOT_DMAR_ON
+#define ENABLE_DSHOT_DMAR       DSHOT_DMAR_OFF
 
 #define LED0_PIN                PB3
 #define USE_BEEPER 
@@ -81,19 +51,19 @@
 #define USE_ACC_SPI_MPU6000
 
 #define USE_VCP
+#define USE_SOFTSERIAL1
+#define USE_UART3
+#define UART3_TX_PIN            PB10
+#define UART3_RX_PIN            PB11
+#define SOFTSERIAL1_TX_PIN      PB4
+
 #if defined(CRAZYBEEF3DX)
 #define USE_UART2
-#define USE_UART3
-#define SERIAL_PORT_COUNT       3
 #define UART2_TX_PIN            PA14
 #define UART2_RX_PIN            PA15
-#define UART3_TX_PIN            PB10
-#define UART3_RX_PIN            PB11
+#define SERIAL_PORT_COUNT       4
 #else
-#define USE_UART3
-#define SERIAL_PORT_COUNT       2
-#define UART3_TX_PIN            PB10
-#define UART3_RX_PIN            PB11
+#define SERIAL_PORT_COUNT       3
 #endif
 
 #define USE_SPI
@@ -103,47 +73,37 @@
 #define SPI1_MISO_PIN           PA6
 #define SPI1_MOSI_PIN           PA7
 
+#if defined(USE_RX_SPI)
 #define USE_SPI_DEVICE_2 
 #define SPI2_NSS_PIN            PB12
 #define SPI2_SCK_PIN            PB13
 #define SPI2_MISO_PIN           PB14
 #define SPI2_MOSI_PIN           PB15
 
-#if defined(CRAZYBEEF3FS)
-#define USE_RX_SPI
-#define USE_RX_FLYSKY
-#define RX_CHANNELS_AETR
-#define DEFAULT_RX_FEATURE      FEATURE_RX_SPI
-#define RX_SPI_DEFAULT_PROTOCOL RX_SPI_A7105_FLYSKY_2A
-#define FLYSKY_2A_CHANNEL_COUNT 14
 #define RX_SPI_INSTANCE         SPI2
 #define RX_NSS_PIN              SPI2_NSS_PIN
 #define RX_SPI_EXTI_PIN         PA8
 #define RX_SPI_BIND_PIN         PA9
 #define RX_SPI_LED_PIN          PA10
-#define DEFAULT_FEATURES        (FEATURE_TELEMETRY | FEATURE_OSD | FEATURE_MOTOR_STOP)
-#elif defined(CRAZYBEEF3DX)
-#define DEFAULT_RX_FEATURE      FEATURE_RX_SERIAL
-#define SERIALRX_PROVIDER       SERIALRX_SPEKTRUM2048
-#define SERIALRX_UART           SERIAL_PORT_USART3
-#define RX_CHANNELS_TAER
-#define DEFAULT_FEATURES        (FEATURE_OSD | FEATURE_MOTOR_STOP)
+#define DEFAULT_RX_FEATURE      FEATURE_RX_SPI
 #else
-#define USE_RX_SPI
-#define USE_RX_FRSKY_SPI_D
-#define USE_RX_FRSKY_SPI_X
-#define USE_RX_SFHSS_SPI
-#define USE_RX_REDPINE_SPI
-#define DEFAULT_RX_FEATURE      FEATURE_RX_SPI
-#define RX_SPI_DEFAULT_PROTOCOL RX_SPI_FRSKY_X
-#define USE_RX_FRSKY_SPI_TELEMETRY
+#define DEFAULT_RX_FEATURE      FEATURE_RX_SERIAL
+#define SERIALRX_UART           SERIAL_PORT_USART3
+#endif
 
-#define RX_SPI_INSTANCE         SPI2
-#define RX_NSS_PIN              SPI2_NSS_PIN
-#define RX_SPI_EXTI_PIN         PA8
-#define RX_SPI_LED_PIN          PA10
-#define RX_SPI_BIND_PIN         PA9
-#define DEFAULT_FEATURES        (FEATURE_TELEMETRY | FEATURE_OSD | FEATURE_MOTOR_STOP)
+#if defined(CRAZYBEEF3FS)
+#if defined(USE_RX_SPI)
+#define RX_SPI_DEFAULT_PROTOCOL RX_SPI_A7105_FLYSKY_2A
+#endif
+#define DEFAULT_FEATURES        (FEATURE_TELEMETRY | FEATURE_OSD)
+#elif defined(CRAZYBEEF3DX)
+#define SERIALRX_PROVIDER       SERIALRX_SPEKTRUM2048
+#define DEFAULT_FEATURES        (FEATURE_OSD)
+#else
+#if defined(USE_RX_SPI)
+#define RX_SPI_DEFAULT_PROTOCOL RX_SPI_FRSKY_D
+#endif
+#define DEFAULT_FEATURES        (FEATURE_TELEMETRY | FEATURE_OSD)
 #endif
 
 #define USE_MAX7456

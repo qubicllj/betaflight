@@ -232,7 +232,7 @@ CFLAGS     += $(ARCH_FLAGS) \
               $(addprefix -I,$(INCLUDE_DIRS)) \
               $(DEBUG_FLAGS) \
               -std=gnu17 \
-              -Wall -Wextra -Werror -Wpedantic -Wunsafe-loop-optimizations -Wdouble-promotion \
+              -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wpedantic -Wunsafe-loop-optimizations -Wdouble-promotion \
               $(EXTRA_WARNING_FLAGS) \
               -ffunction-sections \
               -fdata-sections \
