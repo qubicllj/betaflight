@@ -199,57 +199,74 @@ const uartHardware_t uartHardware[UARTDEV_COUNT] = {
 #endif
 };
 
+bool checkUsartTxOutput(uartPort_t *s)
+{
+    uartDevice_t *uartdev = container_of(s, uartDevice_t, port);
+    IO_t txIO = IOGetByTag(uartdev->tx.pin);
+
+    if ((uartdev->txPinState == TX_PIN_MONITOR) && txIO) {
+        if (IORead(txIO)) {
+            // TX is high so we're good to transmit
+
+            // Enable USART TX output
+            uartdev->txPinState = TX_PIN_ACTIVE;
+            IOConfigGPIOAF(txIO, IOCFG_AF_PP, uartdev->hardware->af);
+            return true;
+        } else {
+            // TX line is pulled low so don't enable USART TX
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void uartTxMonitor(uartPort_t *s)
+{
+    uartDevice_t *uartdev = container_of(s, uartDevice_t, port);
+    IO_t txIO = IOGetByTag(uartdev->tx.pin);
+
+    // Switch TX to an input with pullup so it's state can be monitored
+    uartdev->txPinState = TX_PIN_MONITOR;
+    IOConfigGPIO(txIO, IOCFG_IPU);
+}
+
+static void handleUsartTxDma(uartPort_t *s)
+{
+    uartDevice_t *uartdev = container_of(s, uartDevice_t, port);
+
+    uartTryStartTxDMA(s);
+
+    if (s->txDMAEmpty && (uartdev->txPinState != TX_PIN_IGNORE)) {
+        // Switch TX to an input with pullup so it's state can be monitored
+        uartTxMonitor(s);
+    }
+}
+
 void uartDmaIrqHandler(dmaChannelDescriptor_t* descriptor)
 {
     uartPort_t *s = (uartPort_t*)(descriptor->userParam);
     DMA_CLEAR_FLAG(descriptor, DMA_IT_TCIF);
     xDMA_Cmd(descriptor->ref, DISABLE);
 
-    uartTryStartTxDMA(s);
-}
-
-void serialUARTInitIO(IO_t txIO, IO_t rxIO, portMode_e mode, portOptions_e options, uint8_t af, uint8_t index)
-{
-    if ((options & SERIAL_BIDIR) && txIO) {
-        ioConfig_t ioCfg = IO_CONFIG(GPIO_Mode_AF, GPIO_Speed_50MHz,
-            ((options & SERIAL_INVERTED) || (options & SERIAL_BIDIR_PP) || (options & SERIAL_BIDIR_PP_PD)) ? GPIO_OType_PP : GPIO_OType_OD,
-            ((options & SERIAL_INVERTED) || (options & SERIAL_BIDIR_PP_PD)) ? GPIO_PuPd_DOWN : GPIO_PuPd_UP
-        );
-
-        IOInit(txIO, OWNER_SERIAL_TX, RESOURCE_INDEX(index));
-        IOConfigGPIOAF(txIO, ioCfg, af);
-
-        if (!(options & SERIAL_INVERTED))
-            IOLo(txIO);   // OpenDrain output should be inactive
-    } else {
-        ioConfig_t ioCfg = IO_CONFIG(GPIO_Mode_AF, GPIO_Speed_50MHz, GPIO_OType_PP, (options & SERIAL_INVERTED) ? GPIO_PuPd_DOWN : GPIO_PuPd_UP);
-        if ((mode & MODE_TX) && txIO) {
-            IOInit(txIO, OWNER_SERIAL_TX, RESOURCE_INDEX(index));
-            IOConfigGPIOAF(txIO, ioCfg, af);
-        }
-
-        if ((mode & MODE_RX) && rxIO) {
-            IOInit(rxIO, OWNER_SERIAL_RX, RESOURCE_INDEX(index));
-            IOConfigGPIOAF(rxIO, ioCfg, af);
-        }
-    }
+    handleUsartTxDma(s);
 }
 
 // XXX Should serialUART be consolidated?
 
 uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, portOptions_e options)
 {
-    uartDevice_t *uartDev = uartDevmap[device];
-    if (!uartDev) {
+    uartDevice_t *uartdev = uartDevmap[device];
+    if (!uartdev) {
         return NULL;
     }
 
-    uartPort_t *s = &(uartDev->port);
+    uartPort_t *s = &(uartdev->port);
     s->port.vTable = uartVTable;
 
     s->port.baudRate = baudRate;
 
-    const uartHardware_t *hardware = uartDev->hardware;
+    const uartHardware_t *hardware = uartdev->hardware;
 
     s->USARTx = hardware->reg;
 
@@ -259,11 +276,49 @@ uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, 
     s->port.rxBufferSize = hardware->rxBufferSize;
     s->port.txBufferSize = hardware->txBufferSize;
 
-    RCC_ClockCmd(hardware->rcc, ENABLE);
+    s->checkUsartTxOutput = checkUsartTxOutput;
 
-    uartConfigureDma(uartDev);
+#ifdef USE_DMA
+    uartConfigureDma(uartdev);
+#endif
 
-    serialUARTInitIO(IOGetByTag(uartDev->tx.pin), IOGetByTag(uartDev->rx.pin), mode, options, hardware->af, device);
+    if (hardware->rcc) {
+        RCC_ClockCmd(hardware->rcc, ENABLE);
+    }
+
+    IO_t txIO = IOGetByTag(uartdev->tx.pin);
+    IO_t rxIO = IOGetByTag(uartdev->rx.pin);
+
+    uartdev->txPinState = TX_PIN_IGNORE;
+
+    if ((options & SERIAL_BIDIR) && txIO) {
+        ioConfig_t ioCfg = IO_CONFIG(GPIO_Mode_AF, GPIO_Speed_50MHz,
+            ((options & SERIAL_INVERTED) || (options & SERIAL_BIDIR_PP) || (options & SERIAL_BIDIR_PP_PD)) ? GPIO_OType_PP : GPIO_OType_OD,
+            ((options & SERIAL_INVERTED) || (options & SERIAL_BIDIR_PP_PD)) ? GPIO_PuPd_DOWN : GPIO_PuPd_UP
+        );
+
+        IOInit(txIO, OWNER_SERIAL_TX, RESOURCE_INDEX(device));
+        IOConfigGPIOAF(txIO, ioCfg, hardware->af);
+
+        if (!(options & SERIAL_INVERTED))
+            IOLo(txIO);   // OpenDrain output should be inactive
+    } else {
+        if ((mode & MODE_TX) && txIO) {
+            IOInit(txIO, OWNER_SERIAL_TX, RESOURCE_INDEX(device));
+            if ((options & SERIAL_INVERTED) == SERIAL_NOT_INVERTED) {
+                uartdev->txPinState = TX_PIN_ACTIVE;
+                // Switch TX to an input with pullup so it's state can be monitored
+                uartTxMonitor(s);
+            } else {
+                IOConfigGPIOAF(txIO, IOCFG_AF_PP, hardware->af);
+            }
+        }
+
+        if ((mode & MODE_RX) && rxIO) {
+            IOInit(rxIO, OWNER_SERIAL_RX, RESOURCE_INDEX(device));
+            IOConfigGPIOAF(rxIO, IOCFG_AF_PP, hardware->af);
+        }
+    }
 
     if (!s->rxDMAResource || !s->txDMAResource) {
         NVIC_InitTypeDef NVIC_InitStructure;
@@ -291,6 +346,14 @@ void uartIrqHandler(uartPort_t *s)
                 s->port.rxBufferHead = 0;
             }
         }
+    }
+
+    // Detect completion of transmission
+    if (ISR & USART_FLAG_TC) {
+        // Switch TX to an input with pullup so it's state can be monitored
+        uartTxMonitor(s);
+
+        USART_ClearITPendingBit(s->USARTx, USART_IT_TC);
     }
 
     if (!s->txDMAResource && (ISR & USART_FLAG_TXE)) {
