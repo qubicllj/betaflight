@@ -147,6 +147,9 @@
 #endif
 
 #include "target/common_pre.h"
+
+#include "target/custom_pre.h"
+
 #include "target.h"
 #include "target/common_deprecated_post.h"
 #include "target/common_post.h"

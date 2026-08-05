@@ -46,12 +46,12 @@
 #define USE_ACC
 #define USE_ACC_SPI_MPU6000
 
-#define BARO_SPI_INSTANCE       SPI1
-#define BARO_CS_PIN             PA13
+// #define BARO_SPI_INSTANCE       SPI1
+// #define BARO_CS_PIN             PA13
 
-#define USE_BARO
-#define USE_BARO_BMP280
-#define USE_BARO_SPI_BMP280
+// #define USE_BARO
+// #define USE_BARO_BMP280
+// #define USE_BARO_SPI_BMP280
 
 //#define USE_RANGEFINDER
 //#define USE_RANGEFINDER_HCSR04
@@ -63,11 +63,12 @@
 #define USE_VCP
 #define USE_UART1
 #define USE_UART2
-#define USE_UART3
+// #define USE_UART3
 #define USE_SOFTSERIAL1
-#define USE_SOFTSERIAL2
+// #define USE_SOFTSERIAL2
+#define SOFTSERIAL1_TX_PIN      PB11
 
-#define SERIAL_PORT_COUNT       6
+#define SERIAL_PORT_COUNT       4
 
 #define UART1_TX_PIN            PA9
 #define UART1_RX_PIN            PA10
@@ -75,17 +76,17 @@
 #define UART2_TX_PIN            PA14 // PA14 / SWCLK
 #define UART2_RX_PIN            PA15
 
-#define UART3_TX_PIN            PB10 // PB10 (PWM5)
-#define UART3_RX_PIN            PB11 // PB11 (PWM6)
+// #define UART3_TX_PIN            PB10 // PB10 (PWM5)
+// #define UART3_RX_PIN            PB11 // PB11 (PWM6)
 
-#define USE_I2C
-#define USE_I2C_DEVICE_1
-#define I2C1_SCL                NONE // PB6 (PWM8)
-#define I2C1_SDA                NONE // PB7 (PWM7)
-#define I2C_DEVICE              (I2CDEV_1)
+// #define USE_I2C
+// #define USE_I2C_DEVICE_1
+// #define I2C1_SCL                NONE // PB6 (PWM8)
+// #define I2C1_SDA                NONE // PB7 (PWM7)
+// #define I2C_DEVICE              (I2CDEV_1)
 
-#define USE_ESCSERIAL
-#define ESCSERIAL_TIMER_TX_PIN  PB4  // (HARDARE=0,PPM)
+// #define USE_ESCSERIAL
+// #define ESCSERIAL_TIMER_TX_PIN  PB4  // (HARDARE=0,PPM)
 
 #define USE_SPI
 #define USE_SPI_DEVICE_1
@@ -106,7 +107,7 @@
 #define MAX7456_SPI_CS_PIN      PB1
 //#define MAX7456_DMA_IRQ_HANDLER_ID        DMA1_CH3_HANDLER
 
-#define USE_SPI
+#ifdef USE_BLACKBOX // RAM overflowed when enabled
 #define USE_SPI_DEVICE_2 // PB12,13,14,15 on AF5
 
 #define SPI2_NSS_PIN            PB12
@@ -125,6 +126,8 @@
 #ifndef USE_DSHOT
 #define SDCARD_SPI_DMA_OPT                  0    // DMA 1 Channel 5
 #endif
+#define ENABLE_BLACKBOX_LOGGING_ON_SDCARD_BY_DEFAULT
+#endif
 
 // Performance logging for SD card operations:
 // #define AFATFS_USE_INTROSPECTIVE_LOGGING
@@ -139,13 +142,11 @@
 //#define RSSI_ADC_PIN                PB1
 //#define ADC_INSTANCE                ADC3
 
-#define USE_TRANSPONDER
-#define REDUCE_TRANSPONDER_CURRENT_DRAW_WHEN_USB_CABLE_PRESENT
+// #define USE_TRANSPONDER
+// #define REDUCE_TRANSPONDER_CURRENT_DRAW_WHEN_USB_CABLE_PRESENT
 
-#define ENABLE_BLACKBOX_LOGGING_ON_SDCARD_BY_DEFAULT
-
-#define DEFAULT_RX_FEATURE      FEATURE_RX_PPM
-#define DEFAULT_FEATURES        (FEATURE_OSD)
+#define DEFAULT_RX_FEATURE      FEATURE_RX_SERIAL
+#define DEFAULT_FEATURES        (FEATURE_TELEMETRY | FEATURE_OSD)
 
 // Disable rarely used buttons in favor of flash space
 //#define USE_BUTTONS

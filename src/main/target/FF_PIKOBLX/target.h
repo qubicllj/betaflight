@@ -30,11 +30,10 @@
 #define TARGET_BOARD_IDENTIFIER "PIKO" // Furious FPV PIKOBLX
 #endif
 
-#define ENABLE_DSHOT_DMAR       DSHOT_DMAR_ON
+// #define USE_TARGET_CONFIG
+
 #define REMAP_TIM16_DMA
-
-
-#define USE_TARGET_CONFIG
+#define ENABLE_DSHOT_DMAR       DSHOT_DMAR_OFF
 
 #define LED0_PIN                PB9
 #define LED1_PIN                PB5
@@ -63,12 +62,12 @@
 #define USE_UART1
 #define USE_UART2
 #define USE_UART3
-#define USE_SOFTSERIAL1
-#define USE_SOFTSERIAL2
+// #define USE_SOFTSERIAL1
+// #define USE_SOFTSERIAL2
 
-#define SERIAL_PORT_COUNT       6
+#define SERIAL_PORT_COUNT       4
 
-#define USE_ESCSERIAL
+// #define USE_ESCSERIAL
 #if defined(FF_RADIANCE) || defined(FF_KOMBINI)
 #define ESCSERIAL_TIMER_TX_PIN  PA7  // (Hardware=0)
 #else
@@ -99,10 +98,10 @@
 #endif
 
 #define DEFAULT_RX_FEATURE      FEATURE_RX_SERIAL
-#define SERIALRX_PROVIDER       SERIALRX_SBUS
+#define SERIALRX_PROVIDER       SERIALRX_CRSF
 #define SERIALRX_UART           SERIAL_PORT_USART3
 
-#define USE_TRANSPONDER
+// #define USE_TRANSPONDER
 
 // IO - stm32f303cc in 48pin package
 #define TARGET_IO_PORTA         0xffff
